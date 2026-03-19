@@ -3,7 +3,7 @@
  * Database Connection
  * ไฟล์สำหรับเชื่อมต่อกับฐานข้อมูล MySQL
  */
-$dbhost = "localhost";
+$dbhost = "127.0.0.1";
 $dbuser = "root";
 $dbpass = "";
 $dbname = "stationary";

@@ -25,28 +25,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = sanitizeInput($_POST['username']);
     $password = $_POST['password']; // ไม่ต้อง sanitize เพราะจะไปทำใน hash
 
-    // ในระบบจริงควรตรวจสอบกับฐานข้อมูล แต่สำหรับตัวอย่างนี้จะใช้ข้อมูลแบบ hardcode
-    // โดยปกติควรจะทำแบบนี้:
-    // $sql = "SELECT * FROM users WHERE username = ?";
-    // $stmt = $conn->prepare($sql);
-    // $stmt->bind_param('s', $username);
-    // $stmt->execute();
-    // $result = $stmt->get_result();
-    // if ($result->num_rows > 0) {
-    //     $user = $result->fetch_assoc();
-    //     if (password_verify($password, $user['password'])) {
-    //         // ล็อกอินสำเร็จ
-    //         $_SESSION['user_id'] = $user['id'];
-    //         $_SESSION['user_name'] = $user['name'];
-    //         header('Location: index.php');
-    //         exit;
-    //     }
-    // }
+    $sql = "SELECT * FROM users WHERE username = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param('s', $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
 
-    // แต่เพื่อความง่ายจะใช้ดังนี้:
-    if ($username === 'admin' && $password === 'admin123') {
+    if ($result->num_rows > 0) {
+        $user = $result->fetch_assoc();
+        if (password_verify($password, $user['password'])) {
+            // ล็อกอินสำเร็จ
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_name'] = $user['name'];
+            $_SESSION['role'] = isset($user['role']) ? $user['role'] : 'user';
+            header('Location: index.php');
+            exit;
+        } else {
+            $error = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+        }
+    } elseif ($username === 'admin' && $password === 'admin123') {
+        // ให้บริการ admin แบบลัดเผื่อกรณีเริ่มต้นระบบครั้งแรก
         $_SESSION['user_id'] = 1;
         $_SESSION['user_name'] = 'ผู้ดูแลระบบ';
+        $_SESSION['role'] = 'admin';
         header('Location: index.php');
         exit;
     } else {
@@ -122,7 +123,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </form>
                     
                     <div class="text-center mt-4">
-                        <p class="text-muted small">หมายเหตุ: ใช้ชื่อผู้ใช้ "admin" และรหัสผ่าน "admin123" เพื่อเข้าสู่ระบบ</p>
+                        <p>ยังไม่มีบัญชีผู้ใช้งานใช่หรือไม่? <a href="register.php">สมัครสมาชิก</a></p>
+                        <p class="text-muted small">หมายเหตุ: ใช้ชื่อผู้ใช้ "admin" และรหัสผ่าน "admin123" เพื่อเข้าสู่ระบบได้เลยเช่นกัน</p>
                     </div>
                 </div>
             </div>

@@ -4,6 +4,12 @@
  * โมดูลสำหรับแสดงหน้าหลักของระบบ
  */
 
+// ป้องกันการเข้าถึงไฟล์โดยตรง (Direct Access)
+if (!isset($conn)) {
+    header("Location: ../../index.php");
+    exit;
+}
+
 // กำหนด active tab
 $activeTab = 'home';
 

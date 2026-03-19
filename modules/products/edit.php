@@ -37,7 +37,7 @@ $product = $productResult->fetch_assoc();
 // ตรวจสอบการส่งฟอร์ม
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $productName = sanitizeInput($_POST['prod_name']);
-    $categoryCode = sanitizeInput($_POST['cat_code']);
+    $categoryInput = sanitizeInput($_POST['category_input']);
     $productCost = floatval($_POST['prod_cost']);
     $productPrice = floatval($_POST['prod_price']);
     $productAmount = intval($_POST['prod_amount']);
@@ -50,8 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'กรุณาระบุชื่อสินค้า';
     }
     
-    if (empty($categoryCode)) {
-        $errors[] = 'กรุณาเลือกหมวดหมู่';
+    if (empty($categoryInput)) {
+        $errors[] = 'กรุณาระบุหมวดหมู่';
     }
     
     if ($productCost <= 0) {
@@ -72,27 +72,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // ถ้าไม่มีข้อผิดพลาด
     if (empty($errors)) {
-        // อัปเดตข้อมูลสินค้า
-        $updateSql = "UPDATE product SET 
-                      cat_code = ?, 
-                      prod_name = ?, 
-                      prod_cost = ?, 
-                      prod_price = ?, 
-                      prod_amount = ?, 
-                      prod_unit = ? 
-                      WHERE prod_id = ?";
-        $stmt = $conn->prepare($updateSql);
-        $stmt->bind_param('ssddiss', $categoryCode, $productName, $productCost, $productPrice, $productAmount, $productUnit, $productId);
+        // หาหรือสร้างหมวดหมู่ใหม่
+        $catCheckSql = "SELECT cat_code FROM catagory WHERE cat_desc = ?";
+        $stmtCat = $conn->prepare($catCheckSql);
+        $stmtCat->bind_param('s', $categoryInput);
+        $stmtCat->execute();
+        $catCheckResult = $stmtCat->get_result();
         
-        if ($stmt->execute()) {
-            // บันทึกสำเร็จ
-            $_SESSION['success'] = 'แก้ไขข้อมูลสินค้าเรียบร้อยแล้ว';
-            
-            // แทนที่จะใช้ header() ให้ใช้ JavaScript redirect แทน
-            echo "<script>window.location.href = 'index.php?module=products&action=search';</script>";
-            exit;
+        if ($catCheckResult->num_rows > 0) {
+            $catRow = $catCheckResult->fetch_assoc();
+            $categoryCode = $catRow['cat_code'];
         } else {
-            $errors[] = 'เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' . $conn->error;
+            $catMaxSql = "SELECT MAX(CAST(SUBSTRING(cat_code, 4) AS UNSIGNED)) as max_id FROM catagory WHERE cat_code LIKE 'CAT%'";
+            $catMaxResult = $conn->query($catMaxSql);
+            $catMaxRow = $catMaxResult->fetch_assoc();
+            $nextCatId = 1;
+            if ($catMaxRow['max_id']) {
+                $nextCatId = $catMaxRow['max_id'] + 1;
+            }
+            $categoryCode = 'CAT' . str_pad($nextCatId, 3, '0', STR_PAD_LEFT);
+            
+            $catInsertSql = "INSERT INTO catagory (cat_code, cat_desc) VALUES (?, ?)";
+            $stmtNewCat = $conn->prepare($catInsertSql);
+            $stmtNewCat->bind_param('ss', $categoryCode, $categoryInput);
+            if (!$stmtNewCat->execute()) {
+                $errors[] = 'ไม่สามารถสร้างหมวดหมู่ใหม่ได้: ' . $conn->error;
+            }
+        }
+        
+        if (empty($errors)) {
+            // อัปเดตข้อมูลสินค้า
+            $updateSql = "UPDATE product SET 
+                          cat_code = ?, 
+                          prod_name = ?, 
+                          prod_cost = ?, 
+                          prod_price = ?, 
+                          prod_amount = ?, 
+                          prod_unit = ? 
+                          WHERE prod_id = ?";
+            $stmt = $conn->prepare($updateSql);
+            $stmt->bind_param('ssddiss', $categoryCode, $productName, $productCost, $productPrice, $productAmount, $productUnit, $productId);
+            
+            if ($stmt->execute()) {
+                // บันทึกสำเร็จ
+                $_SESSION['success'] = 'แก้ไขข้อมูลสินค้าเรียบร้อยแล้ว';
+                
+                // แทนที่จะใช้ header() ให้ใช้ JavaScript redirect แทน
+                echo "<script>window.location.href = 'index.php?module=products&action=search';</script>";
+                exit;
+            } else {
+                $errors[] = 'เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' . $conn->error;
+            }
         }
     }
 }
@@ -124,15 +154,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <input type="text" class="form-control" id="prod_id" value="<?php echo htmlspecialchars($product['prod_id']); ?>" readonly>
                 </div>
                 <div class="col-md-8">
-                    <label for="cat_code" class="form-label">หมวดหมู่ <span class="text-danger">*</span></label>
-                    <select class="form-select" id="cat_code" name="cat_code" required>
-                        <option value="">-- เลือกหมวดหมู่ --</option>
+                    <label for="category_input" class="form-label">หมวดหมู่ <span class="text-danger">*</span></label>
+                    <?php 
+                    $currentCatDesc = '';
+                    foreach ($categories as $c) {
+                        if ($c['cat_code'] == $product['cat_code']) {
+                            $currentCatDesc = $c['cat_desc'];
+                            break;
+                        }
+                    }
+                    ?>
+                    <input type="text" class="form-control" id="category_input" name="category_input" list="category_list" value="<?php echo htmlspecialchars($currentCatDesc); ?>" placeholder="เลือกหรือพิมพ์หมวดหมู่ใหม่" required>
+                    <datalist id="category_list">
                         <?php foreach ($categories as $category): ?>
-                            <option value="<?php echo $category['cat_code']; ?>" <?php echo ($category['cat_code'] == $product['cat_code']) ? 'selected' : ''; ?>>
-                                <?php echo $category['cat_desc']; ?>
-                            </option>
+                            <option value="<?php echo htmlspecialchars($category['cat_desc']); ?>"></option>
                         <?php endforeach; ?>
-                    </select>
+                    </datalist>
                 </div>
             </div>
             

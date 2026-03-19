@@ -28,7 +28,7 @@ $newProductId = 'PRD' . str_pad($nextId, 3, '0', STR_PAD_LEFT);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $productId = sanitizeInput($_POST['prod_id']);
     $productName = sanitizeInput($_POST['prod_name']);
-    $categoryCode = sanitizeInput($_POST['cat_code']);
+    $categoryInput = sanitizeInput($_POST['category_input']);
     $productCost = floatval($_POST['prod_cost']);
     $productPrice = floatval($_POST['prod_price']);
     $productAmount = intval($_POST['prod_amount']);
@@ -41,8 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'กรุณาระบุชื่อสินค้า';
     }
     
-    if (empty($categoryCode)) {
-        $errors[] = 'กรุณาเลือกหมวดหมู่';
+    if (empty($categoryInput)) {
+        $errors[] = 'กรุณาระบุหมวดหมู่';
     }
     
     if ($productCost <= 0) {
@@ -63,26 +63,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // ถ้าไม่มีข้อผิดพลาด
     if (empty($errors)) {
-        // ตรวจสอบว่ามีรหัสสินค้านี้อยู่แล้วหรือไม่
-        $checkSql = "SELECT * FROM product WHERE prod_id = '$productId'";
-        $checkResult = $conn->query($checkSql);
+        // หาหรือสร้างหมวดหมู่ใหม่
+        $catCheckSql = "SELECT cat_code FROM catagory WHERE cat_desc = ?";
+        $stmtCat = $conn->prepare($catCheckSql);
+        $stmtCat->bind_param('s', $categoryInput);
+        $stmtCat->execute();
+        $catCheckResult = $stmtCat->get_result();
         
-        if ($checkResult->num_rows > 0) {
-            $errors[] = 'รหัสสินค้านี้มีอยู่ในระบบแล้ว';
+        if ($catCheckResult->num_rows > 0) {
+            $catRow = $catCheckResult->fetch_assoc();
+            $categoryCode = $catRow['cat_code'];
         } else {
-            // เพิ่มสินค้าใหม่
-            $insertSql = "INSERT INTO product (prod_id, cat_code, prod_name, prod_cost, prod_price, prod_amount, prod_unit) 
-                          VALUES (?, ?, ?, ?, ?, ?, ?)";
-            $stmt = $conn->prepare($insertSql);
-            $stmt->bind_param('sssddis', $productId, $categoryCode, $productName, $productCost, $productPrice, $productAmount, $productUnit);
+            $catMaxSql = "SELECT MAX(CAST(SUBSTRING(cat_code, 4) AS UNSIGNED)) as max_id FROM catagory WHERE cat_code LIKE 'CAT%'";
+            $catMaxResult = $conn->query($catMaxSql);
+            $catMaxRow = $catMaxResult->fetch_assoc();
+            $nextCatId = 1;
+            if ($catMaxRow['max_id']) {
+                $nextCatId = $catMaxRow['max_id'] + 1;
+            }
+            $categoryCode = 'CAT' . str_pad($nextCatId, 3, '0', STR_PAD_LEFT);
             
-            if ($stmt->execute()) {
-                // บันทึกสำเร็จ
-                $_SESSION['success'] = 'เพิ่มสินค้าใหม่เรียบร้อยแล้ว';
-                header('Location: index.php?module=products&action=search');
-                exit;
+            $catInsertSql = "INSERT INTO catagory (cat_code, cat_desc) VALUES (?, ?)";
+            $stmtNewCat = $conn->prepare($catInsertSql);
+            $stmtNewCat->bind_param('ss', $categoryCode, $categoryInput);
+            if (!$stmtNewCat->execute()) {
+                $errors[] = 'ไม่สามารถสร้างหมวดหมู่ใหม่ได้: ' . $conn->error;
+            }
+        }
+        
+        if (empty($errors)) {
+            // ตรวจสอบว่ามีรหัสสินค้านี้อยู่แล้วหรือไม่
+            $checkSql = "SELECT * FROM product WHERE prod_id = '$productId'";
+            $checkResult = $conn->query($checkSql);
+            
+            if ($checkResult->num_rows > 0) {
+                $errors[] = 'รหัสสินค้านี้มีอยู่ในระบบแล้ว';
             } else {
-                $errors[] = 'เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' . $conn->error;
+                // เพิ่มสินค้าใหม่
+                $insertSql = "INSERT INTO product (prod_id, cat_code, prod_name, prod_cost, prod_price, prod_amount, prod_unit) 
+                              VALUES (?, ?, ?, ?, ?, ?, ?)";
+                $stmt = $conn->prepare($insertSql);
+                $stmt->bind_param('sssddis', $productId, $categoryCode, $productName, $productCost, $productPrice, $productAmount, $productUnit);
+                
+                if ($stmt->execute()) {
+                    // บันทึกสำเร็จ
+                    $_SESSION['success'] = 'เพิ่มสินค้าใหม่เรียบร้อยแล้ว';
+                    header('Location: index.php?module=products&action=search');
+                    exit;
+                } else {
+                    $errors[] = 'เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' . $conn->error;
+                }
             }
         }
     }
@@ -115,15 +145,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <input type="text" class="form-control" id="prod_id" name="prod_id" value="<?php echo $newProductId; ?>" readonly>
                 </div>
                 <div class="col-md-8">
-                    <label for="cat_code" class="form-label">หมวดหมู่ <span class="text-danger">*</span></label>
-                    <select class="form-select" id="cat_code" name="cat_code" required>
-                        <option value="">-- เลือกหมวดหมู่ --</option>
+                    <label for="category_input" class="form-label">หมวดหมู่ <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="category_input" name="category_input" list="category_list" placeholder="เลือกหรือพิมพ์หมวดหมู่ใหม่" required>
+                    <datalist id="category_list">
                         <?php foreach ($categories as $category): ?>
-                            <option value="<?php echo $category['cat_code']; ?>">
-                                <?php echo $category['cat_desc']; ?>
-                            </option>
+                            <option value="<?php echo htmlspecialchars($category['cat_desc']); ?>"></option>
                         <?php endforeach; ?>
-                    </select>
+                    </datalist>
                 </div>
             </div>
             
