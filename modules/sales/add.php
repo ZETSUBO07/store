@@ -43,6 +43,7 @@ $saleDate = date('Y-m-d');
                     <label for="customer-id" class="form-label">ลูกค้า</label>
                     <select class="form-select" id="customer-id" name="customer_id" required>
                         <option value="">-- เลือกลูกค้า --</option>
+                        <option value="new_customer" class="text-primary fw-bold">+ เพิ่มลูกค้าใหม่</option>
                         <?php foreach ($customers as $customer): ?>
                             <option value="<?php echo $customer['cus_id']; ?>">
                                 <?php echo htmlspecialchars($customer['cus_name']); ?>
@@ -128,3 +129,105 @@ $saleDate = date('Y-m-d');
         </button>
     </div>
 </form>
+
+<!-- Modal เพิ่มลูกค้าใหม่ -->
+<div class="modal fade" id="addCustomerModal" tabindex="-1" aria-labelledby="addCustomerModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addCustomerModalLabel"><i class="bi bi-person-plus"></i> เพิ่มลูกค้าใหม่</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="new-customer-form">
+          <div class="mb-3">
+            <label for="new-cus-name" class="form-label">ชื่อลูกค้า <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="new-cus-name" required>
+          </div>
+          <div class="mb-3">
+            <label for="new-cus-phone" class="form-label">เบอร์โทรศัพท์</label>
+            <input type="text" class="form-control" id="new-cus-phone">
+          </div>
+        </form>
+        <div id="new-customer-alert" class="d-none alert alert-danger"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" id="save-customer-btn">บันทึก</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const customerSelect = document.getElementById('customer-id');
+    const addCustomerModal = new bootstrap.Modal(document.getElementById('addCustomerModal'));
+    
+    // ตรวจจับการเปลี่ยนค่าใน dropdown
+    customerSelect.addEventListener('change', function() {
+        if (this.value === 'new_customer') {
+            document.getElementById('new-customer-form').reset();
+            document.getElementById('new-customer-alert').classList.add('d-none');
+            addCustomerModal.show();
+        }
+    });
+
+    // เมื่อปิด modal ให้กลับไปที่ค่าว่างถ้าไม่ได้เพิ่ม
+    document.getElementById('addCustomerModal').addEventListener('hidden.bs.modal', function () {
+        if (customerSelect.value === 'new_customer') {
+            customerSelect.value = '';
+        }
+    });
+
+    // กดบันทึกลูกค้า
+    document.getElementById('save-customer-btn').addEventListener('click', function() {
+        const cusName = document.getElementById('new-cus-name').value.trim();
+        const cusPhone = document.getElementById('new-cus-phone').value.trim();
+        const alertBox = document.getElementById('new-customer-alert');
+        
+        if (!cusName) {
+            alertBox.textContent = 'กรุณากรอกชื่อลูกค้า';
+            alertBox.classList.remove('d-none');
+            return;
+        }
+
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังบันทึก...';
+
+        const formData = new URLSearchParams();
+        formData.append('cus_name', cusName);
+        formData.append('phone', cusPhone);
+
+        fetch('modules/sales/ajax_add_customer.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // สร้าง option ใหม่
+                const newOption = new Option(data.customer.cus_name, data.customer.cus_id);
+                // แทรกให้เป็นลูกค้าใหม่ที่เลือกล่าสุด
+                customerSelect.add(newOption, customerSelect.options[2]);
+                customerSelect.value = data.customer.cus_id;
+                addCustomerModal.hide();
+            } else {
+                alertBox.textContent = data.message || 'เกิดข้อผิดพลาด';
+                alertBox.classList.remove('d-none');
+            }
+        })
+        .catch(err => {
+            alertBox.textContent = 'เกิดข้อผิดพลาดในการเชื่อมต่อ';
+            alertBox.classList.remove('d-none');
+        })
+        .finally(() => {
+            this.disabled = false;
+            this.textContent = 'บันทึก';
+        });
+    });
+});
+</script>

@@ -20,6 +20,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     amountInputs[i].value = amount.toFixed(2);
                 }
                 
+                // อัปเดตข้อความจำนวนเงินในแถว
+                const row = qtyInputs[i].closest('tr');
+                if (row) {
+                    const amountText = row.querySelector('.product-amount-text');
+                    if (amountText) {
+                        amountText.textContent = amount.toFixed(2);
+                    }
+                }
+                
                 total += amount;
             }
         }
@@ -132,14 +141,26 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // สร้างแถวใหม่
             const newRow = tableBody.insertRow();
+            const unit = selectedOption.getAttribute('data-unit');
             newRow.innerHTML = `
                 <td>
                     <input type="hidden" name="product_id[]" value="${productId}">
                     ${productName}
                 </td>
-                <td class="text-center">${qty} ${selectedOption.getAttribute('data-unit')}</td>
-                <td class="text-end">${parseFloat(price).toFixed(2)} บาท</td>
-                <td class="text-end">${amount} บาท</td>
+                <td class="text-center">
+                    <div class="input-group input-group-sm" style="max-width: 120px; margin: 0 auto;">
+                        <input type="number" class="form-control text-center product-qty" name="product_qty[]" value="${qty}" min="1">
+                        <span class="input-group-text">${unit}</span>
+                    </div>
+                </td>
+                <td class="text-end">
+                    <input type="hidden" class="product-price" name="product_price[]" value="${price}">
+                    ${parseFloat(price).toFixed(2)} บาท
+                </td>
+                <td class="text-end">
+                    <span class="product-amount-text">${amount}</span> บาท
+                    <input type="hidden" class="product-amount" value="${amount}">
+                </td>
                 <td class="text-center">
                     <button type="button" class="btn btn-danger btn-sm btn-remove-item">
                         <i class="bi bi-trash"></i>
@@ -152,6 +173,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 newRow.remove();
                 calculateTotal();
             });
+            
+            // เพิ่ม Event Listener สำหรับการเปลี่ยนจำนวน
+            const qtyInputInRow = newRow.querySelector('.product-qty');
+            qtyInputInRow.addEventListener('change', calculateTotal);
+            qtyInputInRow.addEventListener('keyup', calculateTotal);
             
             // คำนวณยอดรวมใหม่
             calculateTotal();

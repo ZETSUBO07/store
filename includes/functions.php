@@ -263,3 +263,22 @@ function calculateSaleTotal($conn, $saleId) {
     
     return $row['total'] ?? 0;
 }
+
+/**
+ * ฟังก์ชั่นสำหรับสร้างรหัสลูกค้าใหม่
+ * 
+ * @param mysqli $conn การเชื่อมต่อฐานข้อมูล
+ * @return string รหัสลูกค้าใหม่
+ */
+function generateNewCustomerId($conn) {
+    $sql = "SELECT MAX(CAST(SUBSTRING(cus_id, 4) AS UNSIGNED)) as max_id FROM customer WHERE cus_id LIKE 'cus%'";
+    $result = $conn->query($sql);
+    $row = $result->fetch_assoc();
+    
+    $nextId = 1;
+    if ($row['max_id']) {
+        $nextId = $row['max_id'] + 1;
+    }
+    
+    return 'cus' . str_pad($nextId, 3, '0', STR_PAD_LEFT);
+}
